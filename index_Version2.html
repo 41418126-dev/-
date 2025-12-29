@@ -1,0 +1,949 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>工具箱 — 番茄鐘 & F1 行事曆</title>
+
+  <!-- Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;600;700&family=Roboto:wght@300;400;700&display=swap" rel="stylesheet">
+
+  <style>
+    /* Shared variables (timer uses some colors directly via JS) */
+    :root{
+      --bg-light: #FFF9DB; /* 淺黃色背景 */
+      --bg-deep-coffee: #4E342E; /* 深咖啡 */
+      --tomato-color: #FF4500;
+      --tomato-dark: #E63C00;
+      --display-bg: rgba(255,255,255,0.12);
+      --control-bg: rgba(255,255,255,0.9);
+      --control-text: #222;
+
+      /* Calendar scoped defaults (applied inside calendar card) */
+      --cal-bg: linear-gradient(180deg, rgba(5,5,5,0.55), rgba(5,5,5,0.6));
+      --cal-card-bg: linear-gradient(180deg, rgba(255,255,255,0.02), transparent);
+      --cal-muted: #9aa4af;
+      --cal-accent: #e10600;
+      --cal-accent-2: #ff4d4d;
+      --car-image: url('https://images.unsplash.com/photo-1503376780353-7e6692767b70?q=80&w=1920&auto=format&fit=crop&sat=-20');
+      --car-image-opacity: 0.14;
+    }
+
+    /* Base page layout */
+    html,body{
+      height:100%;
+      margin:0;
+      padding:0;
+      background: var(--bg-light);
+      font-family: "Noto Sans TC", "Roboto", "Segoe UI", Arial, sans-serif;
+      -webkit-font-smoothing:antialiased;
+      -moz-osx-font-smoothing:grayscale;
+      display:flex;
+      align-items:flex-start;
+      justify-content:center;
+      padding:24px;
+      box-sizing:border-box;
+      color:#222;
+    }
+
+    .shell{
+      width:100%;
+      max-width:1080px;
+    }
+
+    header.app-header{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      margin-bottom:18px;
+    }
+    .brand-title{
+      display:flex;
+      gap:12px;
+      align-items:center;
+    }
+    .brand-title .logo{
+      width:44px;height:44px;border-radius:8px;
+      background: linear-gradient(135deg,#ff8a3d 0,#ff4500 100%);
+      color:#fff; display:flex;align-items:center;justify-content:center;
+      font-weight:800; font-family: "Oswald", "Roboto", sans-serif; box-shadow:0 6px 18px rgba(0,0,0,0.12);
+    }
+    .brand-title h1{
+      margin:0;font-size:1.05rem;
+      font-family: "Oswald", "Roboto", sans-serif;
+    }
+    .app-nav{ display:flex; gap:8px; align-items:center; }
+    .app-nav button{
+      padding:10px 14px; border-radius:8px; border:1px solid rgba(0,0,0,0.06);
+      background: white; cursor:pointer; font-weight:700;
+      box-shadow: 0 6px 12px rgba(0,0,0,0.06);
+    }
+    .app-nav button.active{
+      background: linear-gradient(180deg,#ffb37a,#ff8a3d);
+      color:#2b1b10;
+      border:1px solid rgba(0,0,0,0.06);
+    }
+
+    /* Student info (top-right) */
+    .student-info{
+      text-align:right;
+      font-size:13px;
+      color:#555;
+      line-height:1.15;
+    }
+    .student-info .name{ font-weight:700; color:#333; }
+
+    /* Main content areas */
+    .content{
+      display:flex;
+      gap:18px;
+      align-items:flex-start;
+      justify-content:center;
+    }
+
+    /* ---------- Tomato Timer Styles (scoped by #timerApp) ---------- */
+    #timerApp{
+      width:520px;
+      max-width:95vw;
+      text-align:center;
+    }
+    #timerApp h2{ margin:0 0 12px; }
+
+    .tomato{
+      width:500px;
+      height:500px;
+      max-width:88vw;
+      margin:0 auto 18px;
+      position:relative;
+      border-radius:50%;
+      background: radial-gradient(circle at 30% 20%, #FF7A3A 0%, var(--tomato-color) 40%, var(--tomato-dark) 100%);
+      box-shadow: 0 12px 30px rgba(0,0,0,0.25), inset 0 -18px 40px rgba(0,0,0,0.12);
+      overflow:visible;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+    }
+
+    .stem{
+      position:absolute;
+      top:-34px;
+      left:50%;
+      transform:translateX(-50%);
+      width:120px;
+      height:70px;
+      border-radius:20px;
+      background: linear-gradient(180deg, #2E7D32, #1B5E20);
+      box-shadow: 0 6px 12px rgba(0,0,0,0.25);
+    }
+    .stem::before,.stem::after{
+      content:"";
+      position:absolute;
+      width:40px;
+      height:24px;
+      border-radius: 16px;
+      background: linear-gradient(180deg,#66BB6A,#2E7D32);
+      box-shadow: 0 3px 6px rgba(0,0,0,0.18);
+      top:-18px;
+    }
+    .stem::before{ left:6px; transform:rotate(-22deg); }
+    .stem::after{ right:6px; transform:rotate(18deg); }
+
+    .display{
+      width:320px;
+      height:160px;
+      border-radius:18px;
+      background: var(--display-bg);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+      border: 1px solid rgba(255,255,255,0.18);
+      box-shadow: 0 8px 18px rgba(0,0,0,0.18);
+      color: #fff;
+      font-weight:500;
+      font-size:64px;
+      letter-spacing:4px;
+      user-select:none;
+    }
+
+    @keyframes blink {
+      0%{ opacity:1; }
+      50%{ opacity:0.12; }
+      100%{ opacity:1; }
+    }
+    .urgent{
+      animation: blink 1s linear infinite;
+      font-weight:800;
+      text-shadow: 0 2px 8px rgba(0,0,0,0.5);
+    }
+
+    .controls{
+      display:flex;
+      gap:10px;
+      justify-content:center;
+      align-items:center;
+    }
+    button, .btn{
+      padding:10px 16px;
+      border-radius:8px;
+      border: none;
+      cursor:pointer;
+      font-size:16px;
+      color:var(--control-text);
+      background: var(--control-bg);
+      box-shadow: 0 6px 12px rgba(0,0,0,0.08);
+    }
+    .btn-primary{
+      background: linear-gradient(180deg,#ffb37a,#ff8a3d);
+      color: #2b1b10;
+      font-weight:700;
+      border:1px solid rgba(0,0,0,0.06);
+    }
+
+    .modal-backdrop{
+      position:fixed;
+      inset:0;
+      background: rgba(0,0,0,0.28);
+      display:none;
+      align-items:center;
+      justify-content:center;
+      z-index:2000;
+    }
+    .modal{
+      background: #fff;
+      padding:18px;
+      border-radius:12px;
+      width:320px;
+      box-shadow: 0 18px 50px rgba(0,0,0,0.35);
+      color:#222;
+    }
+    .modal h3{ margin:0 0 8px 0; font-size:18px; }
+    .inputs{ display:flex; gap:8px; align-items:center; justify-content:center; margin:10px 0 14px; }
+    .inputs input{
+      width:92px; padding:8px 10px; font-size:18px; border-radius:8px; border:1px solid #ddd; text-align:center;
+    }
+    .modal .hint{ font-size:12px; color:#666; margin-bottom:10px; }
+    .small{ font-size:13px; padding:8px 10px; border-radius:8px; }
+
+    .note{ margin-top:8px; font-size:13px; color:#3b3b3b; }
+
+    @media (max-width:540px){
+      .tomato{ width:88vw; height:88vw; }
+      .display{ width:68%; height:20%; font-size:calc(18px + 6vw); }
+    }
+
+    /* ---------- Calendar Styles (scoped by .calendar-app) ---------- */
+    .calendar-app{
+      width:980px;
+      max-width:95vw;
+      box-sizing:border-box;
+    }
+    .wrap{
+      display:grid;
+      grid-template-columns: 1fr 320px;
+      gap:18px;
+      align-items:start;
+    }
+
+    .card{
+      background: var(--cal-card-bg);
+      border:1px solid rgba(255,255,255,0.03);
+      border-radius:10px;
+      padding:14px;
+      box-shadow: 0 8px 30px rgba(2,6,23,0.6), inset 0 1px 0 rgba(255,255,255,0.02);
+      backdrop-filter: blur(4px);
+      position:relative;
+      overflow:hidden;
+    }
+
+    .card.calendar-with-car::before{
+      content: '';
+      position: absolute;
+      inset: 0;
+      background-image:
+        linear-gradient(180deg, rgba(5,5,5,0.55), rgba(5,5,5,0.6)),
+        var(--car-image);
+      background-size: cover;
+      background-position: center right;
+      opacity: var(--car-image-opacity);
+      pointer-events: none;
+      z-index: 0;
+      filter: saturate(0.95) contrast(0.95);
+    }
+
+    .card .stripe{
+      position:absolute;
+      inset:0;
+      background-image:
+        linear-gradient(135deg, rgba(255,255,255,0.01) 25%, transparent 25%, transparent 50%, rgba(255,255,255,0.01) 50%, rgba(255,255,255,0.01) 75%, transparent 75%, transparent);
+      background-size:18px 18px;
+      pointer-events:none;
+      mix-blend-mode:overlay;
+      opacity:0.04;
+      border-radius:10px;
+      z-index:1;
+    }
+
+    .card-inner{ position:relative; z-index:2; color:#e6eef8; font-family: "Roboto", system-ui, -apple-system, "Segoe UI", Arial; }
+
+    header.calendar-header{ display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:12px; }
+    .brand{ display:flex; gap:12px; align-items:center; color:#fff; }
+    .logo{
+      width:44px;height:44px;
+      background: linear-gradient(135deg, #111 0%, #1a1a1a 50%);
+      border-radius:6px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      color:var(--cal-accent);
+      font-family:var(--font-heading);
+      font-weight:700;
+      font-size:1.05rem;
+      letter-spacing:1px;
+      box-shadow: 0 4px 14px rgba(225,16,0,0.06);
+      border:1px solid rgba(255,255,255,0.02);
+    }
+    .brand .title{ font-family: "Oswald", "Roboto", sans-serif; font-size:1.05rem; font-weight:700; color:#fff; }
+    .brand .subtitle{ font-size:0.8rem; color:var(--cal-muted); margin-top:2px; }
+
+    .nav{ display:flex; gap:8px; align-items:center; }
+    .calendar-btn{
+      border:1px solid rgba(255,255,255,0.04);
+      background: linear-gradient(180deg, rgba(255,255,255,0.02), transparent);
+      color:#fff;
+      padding:8px 10px;
+      border-radius:6px;
+      cursor:pointer;
+      font-weight:700;
+      font-size:0.95rem;
+      letter-spacing:0.6px;
+    }
+    .today-pill{
+      background: linear-gradient(90deg, rgba(225,16,0,0.12), rgba(255,77,77,0.04));
+      color:var(--cal-accent-2);
+      padding:6px 10px;
+      border-radius:999px;
+      font-weight:700;
+      font-size:0.9rem;
+      border:1px solid rgba(225,16,0,0.08);
+    }
+
+    .weekday-row{ display:grid; grid-template-columns:repeat(7,1fr); gap:6px; color:var(--cal-muted); font-size:0.85rem; text-align:center; padding:6px 4px; margin-bottom:6px; }
+    .weekday-row > div{ text-transform: uppercase; font-weight:700; letter-spacing:1px; font-size:0.78rem; color:rgba(255,255,255,0.6) }
+
+    .grid{ display:grid; grid-template-columns:repeat(7,1fr); gap:8px; }
+    .cell{
+      min-height:72px; height:72px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.01), rgba(0,0,0,0.06));
+      border-radius:6px;
+      padding:8px;
+      position:relative;
+      overflow:hidden;
+      display:flex;
+      flex-direction:column;
+      justify-content:flex-start;
+      align-items:flex-end;
+      cursor:default;
+      border:1px solid rgba(255,255,255,0.02);
+      transition: transform 140ms cubic-bezier(.2,.9,.3,1), box-shadow 140ms ease, background 120ms ease;
+      backdrop-filter: blur(2px);
+    }
+    .cell:hover{ transform: translateY(-6px); box-shadow: 0 18px 40px rgba(0,0,0,0.6); z-index:3; }
+    .cell.muted{ opacity:0.45; filter:grayscale(10%); }
+    .cell .date{ font-weight:700; font-size:0.95rem; color:#fff; }
+    .cell.today{ outline: 2px solid rgba(225,16,0,0.14); box-shadow: inset 0 -6px 0 rgba(225,16,0,0.06), 0 14px 30px rgba(225,16,0,0.04); }
+
+    .event-dot{ width:12px;height:12px;border-radius:2px; position:absolute; left:8px; top:8px; box-shadow:0 3px 10px rgba(0,0,0,0.6); border:2px solid rgba(15,15,15,0.6); transform: rotate(12deg); }
+    .event-badge{ margin-top:auto; width:100%; text-align:left; font-size:0.84rem; padding-top:6px; }
+    .event-badge a{ color:#fff; text-decoration:none; display:inline-block; max-width:100%; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-weight:600; font-size:0.9rem; }
+
+    .muted-text{ color:var(--cal-muted); font-size:0.9rem }
+    .events-list{ display:flex; flex-direction:column; gap:10px; margin-top:12px; }
+    .event-item{ border-radius:8px; padding:10px; background: linear-gradient(90deg, rgba(255,255,255,0.015), rgba(0,0,0,0.06)); border:1px solid rgba(255,255,255,0.02); display:flex; gap:12px; align-items:center; color:#fff; }
+    .event-color{ width:12px;height:12px;border-radius:3px;flex:0 0 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.6); }
+    .event-meta{ font-size:0.95rem; color:#fff }
+    .event-meta a{ color:var(--cal-accent-2); text-decoration:none; font-weight:700 }
+
+    .footer-hint{ margin-top:10px; color:var(--cal-muted); font-size:0.85rem }
+
+    @media (max-width:880px){
+      .wrap{ grid-template-columns:1fr; padding:8px }
+      .brand .subtitle{ display:none }
+    }
+
+    /* Utility: hide sections */
+    .hidden{ display:none !important; }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header class="app-header" role="banner">
+      <div class="brand-title">
+        <div class="logo">工具</div>
+        <div>
+          <h1>番茄鐘 & F1 行事曆</h1>
+          <div style="font-size:13px;color:#555">在同一頁面切換兩個工具</div>
+        </div>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:18px;">
+        <nav class="app-nav" role="navigation" aria-label="主工具選單">
+          <button id="navTimer" class="active" aria-pressed="true">番茄鐘</button>
+          <button id="navCalendar" aria-pressed="false">F1 行事曆</button>
+        </nav>
+
+        <!-- 新增學生資訊 -->
+        <div class="student-info" aria-hidden="false">
+          <div class="name">姓名: 劉品言</div>
+          <div class="id">學號: 41418126</div>
+        </div>
+      </div>
+    </header>
+
+    <main class="content" role="main">
+      <!-- Timer App -->
+      <section id="timerApp" aria-labelledby="timerTitle">
+        <h2 id="timerTitle" style="margin:0 0 12px;">番茄鐘計時器</h2>
+
+        <div class="tomato" id="tomato" aria-hidden="false">
+          <div class="stem" aria-hidden="true"></div>
+
+          <div class="display" id="timeDisplay" aria-live="polite" role="timer">
+            25:00
+          </div>
+
+          <div style="position:absolute; left:18px; bottom:18px; display:flex; gap:8px;">
+            <button id="btnSettings" class="btn" title="設定計時長度">⚙️ 設定</button>
+            <button id="btnClear" class="btn" title="清除剩餘時間">🧹 清除</button>
+          </div>
+
+          <div style="position:absolute; right:18px; bottom:18px;">
+            <button id="btnStart" class="btn btn-primary" title="開始計時">開始</button>
+          </div>
+
+        </div>
+
+        <div class="controls" aria-hidden="true" style="opacity:0.9;">
+          <div style="font-size:13px; color:#333; padding:6px 10px; border-radius:8px; background:rgba(255,255,255,0.9);">
+            可設定最長 99 分 59 秒
+          </div>
+        </div>
+
+        <div class="note">
+          提示：按「設定」可調整分/秒，按「清除」會停止並清除剩餘時間，按「開始」啟動計時。按空白鍵也可啟動。
+        </div>
+
+        <!-- 設定模態 -->
+        <div class="modal-backdrop" id="modalBackdrop" role="dialog" aria-modal="true" aria-hidden="true">
+          <div class="modal" role="document">
+            <h3>設定計時長度</h3>
+            <div class="hint">請輸入分鐘與秒數，最大 99 分 59 秒</div>
+            <div class="inputs">
+              <input type="number" id="inputMin" min="0" max="99" value="25" aria-label="分鐘" />
+              <input type="number" id="inputSec" min="0" max="59" value="0" aria-label="秒" />
+            </div>
+            <div style="display:flex; gap:8px; justify-content:flex-end;">
+              <button class="small" id="modalCancel">取消</button>
+              <button class="small btn-primary" id="modalSave">儲存</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Calendar App -->
+      <section id="calendarApp" class="hidden" aria-labelledby="calendarTitle">
+        <h2 id="calendarTitle" style="margin:0 0 12px;">F1 風行事曆（賽車背景）</h2>
+
+        <div class="calendar-app">
+          <div class="wrap">
+            <div class="card calendar-with-car" id="calendar-card" aria-label="月份行事曆">
+              <div class="stripe" aria-hidden="true"></div>
+              <div class="card-inner">
+                <div class="calendar-header">
+                  <div class="brand">
+                    <div class="logo">F1</div>
+                    <div>
+                      <div class="title">F1 行事曆</div>
+                      <div class="subtitle">賽程風 / 重要日期標記</div>
+                    </div>
+                  </div>
+
+                  <div style="display:flex;align-items:center;gap:12px">
+                    <div class="month-title" id="monthTitle" aria-live="polite" style="font-size:1.1rem;font-weight:700;color:#fff"></div>
+                    <div class="nav">
+                      <button class="calendar-btn" id="prevBtn" title="上個月">&lt;</button>
+                      <button class="calendar-btn" id="todayBtn" title="返回今天">今天</button>
+                      <button class="calendar-btn" id="nextBtn" title="下個月">&gt;</button>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="weekday-row" aria-hidden="true">
+                  <div>日</div><div>一</div><div>二</div><div>三</div><div>四</div><div>五</div><div>六</div>
+                </div>
+
+                <div class="grid" id="calendarGrid" role="grid" aria-label="月份日期"></div>
+
+                <div class="footer-hint">點擊有連結的日期會另開分頁。滑鼠停留可閱讀事件標題。</div>
+              </div>
+            </div>
+
+            <aside class="card" id="events-card" style="align-self:start;">
+              <div style="display:flex;justify-content:space-between;align-items:center">
+                <strong>當月重要日期</strong>
+                <span class="muted-text" id="eventsCount">0 項</span>
+              </div>
+              <div class="events-list" id="eventsList" aria-live="polite"></div>
+
+              <div style="margin-top:12px;display:flex;align-items:center;gap:8px">
+                <div style="width:10px;height:10px;background:var(--cal-accent);border-radius:2px"></div>
+                <div class="muted-text" style="font-size:0.9rem">紅色：主要事件</div>
+              </div>
+
+              <div class="muted-text" style="margin-top:12px;font-size:0.85rem">
+                在下面的 importantDates 物件中新增或修改事件（可於 console 臨時變更）。
+              </div>
+            </aside>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    /* ========================
+       Navigation: 切換兩個工具
+       ======================== */
+    const navTimer = document.getElementById('navTimer');
+    const navCalendar = document.getElementById('navCalendar');
+    const timerAppEl = document.getElementById('timerApp');
+    const calendarAppEl = document.getElementById('calendarApp');
+
+    function showTimer(){
+      navTimer.classList.add('active');
+      navCalendar.classList.remove('active');
+      navTimer.setAttribute('aria-pressed', 'true');
+      navCalendar.setAttribute('aria-pressed', 'false');
+
+      calendarAppEl.classList.add('hidden');
+      timerAppEl.classList.remove('hidden');
+
+      // notify apps
+      if (window.CalendarApp && window.CalendarApp.onHide) window.CalendarApp.onHide();
+      if (window.TimerApp && window.TimerApp.onShow) window.TimerApp.onShow();
+    }
+    function showCalendar(){
+      navCalendar.classList.add('active');
+      navTimer.classList.remove('active');
+      navCalendar.setAttribute('aria-pressed', 'true');
+      navTimer.setAttribute('aria-pressed', 'false');
+
+      timerAppEl.classList.add('hidden');
+      calendarAppEl.classList.remove('hidden');
+
+      if (window.TimerApp && window.TimerApp.onHide) window.TimerApp.onHide();
+      if (window.CalendarApp && window.CalendarApp.onShow) window.CalendarApp.onShow();
+    }
+
+    navTimer.addEventListener('click', showTimer);
+    navCalendar.addEventListener('click', showCalendar);
+
+    /* ================
+       TimerApp (namespaced)
+       ================ */
+    window.TimerApp = (function(){
+      // DOM 元件
+      const body = document.body;
+      const display = document.getElementById('timeDisplay');
+      const btnStart = document.getElementById('btnStart');
+      const btnSettings = document.getElementById('btnSettings');
+      const btnClear = document.getElementById('btnClear');
+      const modalBackdrop = document.getElementById('modalBackdrop');
+      const inputMin = document.getElementById('inputMin');
+      const inputSec = document.getElementById('inputSec');
+      const modalSave = document.getElementById('modalSave');
+      const modalCancel = document.getElementById('modalCancel');
+
+      // state
+      let totalSecondsSetting = 25*60;
+      let remainingSeconds = totalSecondsSetting;
+      let timerInterval = null;
+      let endFlashInterval = null;
+      let isRunning = false;
+      let isEnded = false;
+
+      function formatTime(sec){
+        sec = Math.max(0, Math.floor(sec));
+        const minutes = Math.floor(sec / 60);
+        const seconds = sec % 60;
+        const mm = String(minutes).padStart(2,'0');
+        const ss = String(seconds).padStart(2,'0');
+        return mm + ':' + ss;
+      }
+
+      function refreshDisplay(){
+        display.textContent = formatTime(remainingSeconds);
+        if (isRunning && remainingSeconds > 0 && remainingSeconds <= 180) {
+          display.classList.add('urgent');
+        } else {
+          display.classList.remove('urgent');
+        }
+      }
+
+      function startTimer(){
+        if (isRunning) return;
+        if (remainingSeconds <= 0) {
+          remainingSeconds = totalSecondsSetting;
+        }
+        if (remainingSeconds <= 0) {
+          alert('請先設定大於 0 的時間。');
+          return;
+        }
+
+        isRunning = true;
+        isEnded = false;
+        btnStart.textContent = '進行中...';
+        btnStart.disabled = true;
+        btnSettings.disabled = true;
+
+        stopEndFlashing();
+
+        timerInterval = setInterval(() => {
+          remainingSeconds--;
+          refreshDisplay();
+
+          if (remainingSeconds <= 0){
+            stopTimer(false);
+            handleTimerEnd();
+          }
+        }, 1000);
+
+        refreshDisplay();
+      }
+
+      function stopTimer(clearOnly=true){
+        if (timerInterval){
+          clearInterval(timerInterval);
+          timerInterval = null;
+        }
+        isRunning = false;
+        btnStart.textContent = '開始';
+        btnStart.disabled = false;
+        btnSettings.disabled = false;
+        if (clearOnly) {
+          display.classList.remove('urgent');
+        }
+      }
+
+      function handleTimerEnd(){
+        isEnded = true;
+        let toggle = false;
+        // alternate body background color
+        endFlashInterval = setInterval(() => {
+          toggle = !toggle;
+          body.style.background = toggle ? 'var(--bg-deep-coffee)' : 'var(--bg-light)';
+        }, 600);
+
+        remainingSeconds = 0;
+        refreshDisplay();
+
+        btnStart.disabled = false;
+        btnSettings.disabled = false;
+        btnStart.textContent = '開始';
+        isRunning = false;
+      }
+
+      function stopEndFlashing(){
+        if (endFlashInterval){
+          clearInterval(endFlashInterval);
+          endFlashInterval = null;
+        }
+        body.style.background = 'var(--bg-light)';
+      }
+
+      function clearRemaining(){
+        if (timerInterval) {
+          clearInterval(timerInterval);
+          timerInterval = null;
+        }
+        stopEndFlashing();
+
+        isRunning = false;
+        isEnded = false;
+
+        remainingSeconds = totalSecondsSetting;
+        refreshDisplay();
+
+        btnStart.textContent = '開始';
+        btnStart.disabled = false;
+        btnSettings.disabled = false;
+      }
+
+      function openSettings(){
+        const mins = Math.floor(totalSecondsSetting / 60);
+        const secs = totalSecondsSetting % 60;
+        inputMin.value = String(mins);
+        inputSec.value = String(secs);
+        modalBackdrop.style.display = 'flex';
+        modalBackdrop.setAttribute('aria-hidden','false');
+      }
+      function closeSettings(){
+        modalBackdrop.style.display = 'none';
+        modalBackdrop.setAttribute('aria-hidden','true');
+      }
+      function saveSettings(){
+        let m = parseInt(inputMin.value || '0', 10);
+        let s = parseInt(inputSec.value || '0', 10);
+        if (isNaN(m)) m = 0;
+        if (isNaN(s)) s = 0;
+        if (m < 0) m = 0;
+        if (m > 99) m = 99;
+        if (s < 0) s = 0;
+        if (s > 59) s = 59;
+
+        totalSecondsSetting = m*60 + s;
+        if (!isRunning && !isEnded) {
+          remainingSeconds = totalSecondsSetting;
+        }
+        refreshDisplay();
+        closeSettings();
+      }
+
+      // bind
+      btnStart.addEventListener('click', () => startTimer());
+      btnSettings.addEventListener('click', () => { if (!isRunning) openSettings(); });
+      btnClear.addEventListener('click', () => { clearRemaining(); });
+
+      modalCancel.addEventListener('click', () => closeSettings());
+      modalBackdrop.addEventListener('click', (e) => { if (e.target === modalBackdrop) closeSettings(); });
+      modalSave.addEventListener('click', () => { saveSettings(); });
+
+      inputSec.addEventListener('keydown', (e) => { if (e.key === 'Enter') saveSettings(); });
+      inputMin.addEventListener('keydown', (e) => { if (e.key === 'Enter') saveSettings(); });
+
+      // keyboard start (space)
+      window.addEventListener('keydown', (e) => {
+        if (e.code === 'Space' && !e.altKey && !e.ctrlKey && !e.metaKey) {
+          const active = document.activeElement;
+          if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) return;
+          // only start when timer app visible
+          if (timerAppEl.classList.contains('hidden')) return;
+          e.preventDefault();
+          if (!isRunning) startTimer();
+        }
+      });
+
+      // cleanup on unload
+      window.addEventListener('beforeunload', () => {
+        if (timerInterval) clearInterval(timerInterval);
+        if (endFlashInterval) clearInterval(endFlashInterval);
+      });
+
+      // init display
+      remainingSeconds = totalSecondsSetting;
+      refreshDisplay();
+
+      return {
+        // expose lifecycle hooks for navigation
+        onShow(){
+          // nothing special for now
+        },
+        onHide(){
+          // pause timer when switching away (but don't clear remaining by default)
+          if (isRunning) {
+            stopTimer(false);
+          }
+        },
+        stopAll(){
+          if (timerInterval) clearInterval(timerInterval);
+          if (endFlashInterval) clearInterval(endFlashInterval);
+          stopEndFlashing();
+          timerInterval = null;
+          endFlashInterval = null;
+          isRunning = false;
+          isEnded = false;
+        }
+      };
+    })();
+
+    /* ===========================
+       CalendarApp (namespaced)
+       =========================== */
+    window.CalendarApp = (function(){
+      // importantDates sample (can be modified in console)
+      const importantDates = {
+        "2025-12-25": { title: "耶誕節 - 公司放假", url: "https://example.com/christmas", color: "#e10600" },
+        "2025-12-31": { title: "跨年活動", url: "https://example.com/newyear", color: "#ff8a00" },
+        "2026-01-01": { title: "元旦", url: "https://example.com/newyear-day", color: "#10b981" },
+      };
+
+      const grid = document.getElementById('calendarGrid');
+      const monthTitle = document.getElementById('monthTitle');
+      const eventsList = document.getElementById('eventsList');
+      const eventsCount = document.getElementById('eventsCount');
+
+      let current = new Date();
+      const today = new Date();
+
+      function toISODate(d){
+        const y = d.getFullYear();
+        const m = String(d.getMonth()+1).padStart(2,'0');
+        const day = String(d.getDate()).padStart(2,'0');
+        return `${y}-${m}-${day}`;
+      }
+
+      function render(){
+        grid.innerHTML = '';
+        eventsList.innerHTML = '';
+
+        const year = current.getFullYear();
+        const month = current.getMonth();
+        monthTitle.textContent = `${year} 年 ${month+1} 月`;
+
+        const first = new Date(year, month, 1);
+        const startWeekday = first.getDay();
+        const daysInMonth = new Date(year, month+1, 0).getDate();
+        const prevDays = new Date(year, month, 0).getDate();
+        const totalCells = 42;
+        const cells = [];
+
+        for(let i=0;i<startWeekday;i++){
+          const dayNum = prevDays - startWeekday + 1 + i;
+          const dateObj = new Date(year, month-1, dayNum);
+          cells.push({ date: dateObj, muted: true });
+        }
+        for(let d=1; d<=daysInMonth; d++){
+          const dateObj = new Date(year, month, d);
+          cells.push({ date: dateObj, muted: false });
+        }
+        while(cells.length < totalCells){
+          const nextIndex = cells.length - (startWeekday + daysInMonth) + 1;
+          const dateObj = new Date(year, month+1, nextIndex);
+          cells.push({ date: dateObj, muted: true });
+        }
+
+        for(const c of cells){
+          const iso = toISODate(c.date);
+          const isToday = iso === toISODate(today);
+          const hasEvent = importantDates.hasOwnProperty(iso);
+          const ev = importantDates[iso];
+
+          const cell = document.createElement('div');
+          cell.className = 'cell' + (c.muted ? ' muted' : '') + (isToday ? ' today' : '');
+          cell.setAttribute('role','gridcell');
+          cell.setAttribute('aria-label', `${c.date.getFullYear()}年${c.date.getMonth()+1}月${c.date.getDate()}日` + (hasEvent? '，有事件':''));
+          cell.dataset.date = iso;
+
+          if(hasEvent){
+            const dot = document.createElement('span');
+            dot.className = 'event-dot';
+            dot.style.background = ev.color || 'var(--cal-accent)';
+            dot.title = ev.title || '';
+            cell.appendChild(dot);
+          }
+
+          const dateDiv = document.createElement('div');
+          dateDiv.className = 'date';
+          dateDiv.textContent = c.date.getDate();
+          cell.appendChild(dateDiv);
+
+          if(hasEvent && !c.muted){
+            const badge = document.createElement('div');
+            badge.className = 'event-badge';
+            const a = document.createElement('a');
+            a.href = ev.url || '#';
+            a.target = '_blank';
+            a.rel = 'noopener noreferrer';
+            a.title = ev.title || ev.url || '';
+            a.textContent = ev.title || ev.url;
+            badge.appendChild(a);
+            cell.appendChild(badge);
+          }
+
+          cell.addEventListener('click', ()=>{
+            if(hasEvent && ev.url){
+              window.open(ev.url, '_blank', 'noopener');
+            }
+          });
+
+          grid.appendChild(cell);
+        }
+
+        const eventEntries = Object.entries(importantDates)
+          .map(([date, data])=> ({ date, data }))
+          .filter(item => {
+            const d = new Date(item.date + 'T00:00:00');
+            return d.getFullYear() === year && d.getMonth() === month;
+          })
+          .sort((a,b)=> a.date.localeCompare(b.date));
+
+        eventsCount.textContent = `${eventEntries.length} 項`;
+        if(eventEntries.length === 0){
+          const empty = document.createElement('div');
+          empty.className = 'muted-text';
+          empty.textContent = '本月沒有已設定的重要日期';
+          eventsList.appendChild(empty);
+        } else {
+          for(const e of eventEntries){
+            const row = document.createElement('div');
+            row.className = 'event-item';
+            const color = document.createElement('div');
+            color.className = 'event-color';
+            color.style.background = e.data.color || 'var(--cal-accent)';
+            const meta = document.createElement('div');
+            meta.className = 'event-meta';
+            const dateLine = document.createElement('div');
+            dateLine.style.fontWeight = '700';
+            dateLine.textContent = e.date;
+            const titleLine = document.createElement('div');
+            const a = document.createElement('a');
+            a.href = e.data.url || '#';
+            a.target = '_blank';
+            a.rel = 'noopener noreferrer';
+            a.textContent = e.data.title || (e.data.url || '');
+            titleLine.appendChild(a);
+            meta.appendChild(dateLine);
+            meta.appendChild(titleLine);
+            row.appendChild(color);
+            row.appendChild(meta);
+            eventsList.appendChild(row);
+          }
+        }
+      }
+
+      document.getElementById('prevBtn').addEventListener('click', ()=>{
+        current = new Date(current.getFullYear(), current.getMonth()-1, 1);
+        render();
+      });
+      document.getElementById('nextBtn').addEventListener('click', ()=>{
+        current = new Date(current.getFullYear(), current.getMonth()+1, 1);
+        render();
+      });
+      document.getElementById('todayBtn').addEventListener('click', ()=>{
+        current = new Date();
+        render();
+      });
+
+      current = new Date(today.getFullYear(), today.getMonth(), 1);
+      render();
+
+      // expose for console convenience
+      window.importantDates = importantDates;
+
+      return {
+        onShow(){
+          // nothing special currently
+        },
+        onHide(){
+          // nothing special
+        }
+      };
+    })();
+
+    // Ensure initial state: Timer visible
+    showTimer();
+  </script>
+</body>
+</html>
